@@ -11,6 +11,11 @@ struct Piece: Equatable {
 struct Board {
     /// squares[row][col], row 0 is black's back rank (top of screen).
     var squares: [[Piece?]]
+    /// Original squares of kings and rooks that have not moved yet (castling rights).
+    var unmoved: Set<Square> = [Square(r: 7, c: 4), Square(r: 7, c: 0), Square(r: 7, c: 7),
+                                Square(r: 0, c: 4), Square(r: 0, c: 0), Square(r: 0, c: 7)]
+    /// Square a pawn skipped on the previous move, capturable en passant this turn.
+    var enPassant: Square? = nil
 
     static func standard() -> Board {
         let back: [PieceKind] = [.rook, .knight, .bishop, .queen, .king, .bishop, .knight, .rook]
@@ -86,7 +91,10 @@ extension Board {
             }
             for dc in [-1, 1] {
                 let c = s.c + dc
-                if Board.inside(r1, c), let q = squares[r1][c], q.color != p.color {
+                guard Board.inside(r1, c) else { continue }
+                if let q = squares[r1][c], q.color != p.color {
+                    out.append(Square(r: r1, c: c))
+                } else if enPassant == Square(r: r1, c: c) {
                     out.append(Square(r: r1, c: c))
                 }
             }
@@ -115,14 +123,63 @@ extension Board {
 
     func applying(_ from: Square, _ to: Square) -> Board {
         var b = self
-        b[to] = b[from]
+        guard let p = b[from] else { return b }
+        b.enPassant = nil
+
+        // En passant: pawn moves diagonally onto the empty skipped square.
+        if p.kind == .pawn, from.c != to.c, b[to] == nil {
+            b[Square(r: from.r, c: to.c)] = nil
+        }
+        // Castling: king moves two files; bring the rook across.
+        if p.kind == .king, abs(to.c - from.c) == 2 {
+            let rookFrom = Square(r: from.r, c: to.c > from.c ? 7 : 0)
+            let rookTo = Square(r: from.r, c: to.c > from.c ? 5 : 3)
+            b[rookTo] = b[rookFrom]
+            b[rookFrom] = nil
+        }
+        // Double pawn push opens an en passant chance for one turn.
+        if p.kind == .pawn, abs(to.r - from.r) == 2 {
+            b.enPassant = Square(r: (from.r + to.r) / 2, c: from.c)
+        }
+
+        b[to] = p
         b[from] = nil
+
+        // Promotion: always to a queen.
+        if p.kind == .pawn, to.r == 0 || to.r == 7 {
+            b[to] = Piece(kind: .queen, color: p.color)
+        }
+        // Moving from, or being captured on, an original king/rook square ends that right.
+        b.unmoved.remove(from)
+        b.unmoved.remove(to)
         return b
     }
 
-    /// Pseudo moves that do not leave the mover's own king in check.
+    /// Castling destinations for the king on `s`, checking every rule.
+    func castlingMoves(from s: Square) -> [Square] {
+        guard let p = self[s], p.kind == .king, unmoved.contains(s) else { return [] }
+        let enemy = p.color.opponent
+        guard !isAttacked(s, by: enemy) else { return [] }
+        var out: [Square] = []
+        // kingside: rook on h-file, f and g empty and not attacked
+        if unmoved.contains(Square(r: s.r, c: 7)), self[Square(r: s.r, c: 7)] == Piece(kind: .rook, color: p.color),
+           squares[s.r][5] == nil, squares[s.r][6] == nil,
+           !isAttacked(Square(r: s.r, c: 5), by: enemy), !isAttacked(Square(r: s.r, c: 6), by: enemy) {
+            out.append(Square(r: s.r, c: 6))
+        }
+        // queenside: rook on a-file, b, c, d empty; d and c not attacked
+        if unmoved.contains(Square(r: s.r, c: 0)), self[Square(r: s.r, c: 0)] == Piece(kind: .rook, color: p.color),
+           squares[s.r][1] == nil, squares[s.r][2] == nil, squares[s.r][3] == nil,
+           !isAttacked(Square(r: s.r, c: 3), by: enemy), !isAttacked(Square(r: s.r, c: 2), by: enemy) {
+            out.append(Square(r: s.r, c: 2))
+        }
+        return out
+    }
+
+    /// Moves that do not leave the mover's own king in check, including castling.
     func legalMoves(from s: Square) -> [Square] {
         guard let p = self[s] else { return [] }
-        return pseudoMoves(from: s).filter { !applying(s, $0).inCheck(p.color) }
+        let candidates = pseudoMoves(from: s) + castlingMoves(from: s)
+        return candidates.filter { !applying(s, $0).inCheck(p.color) }
     }
 }
