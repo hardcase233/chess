@@ -4,6 +4,7 @@ struct ContentView: View {
     @State private var board = Board.standard()
     @State private var turn: PieceColor = .white
     @State private var selected: Square? = nil
+    @State private var result: String? = nil
 
     var body: some View {
         ZStack {
@@ -21,26 +22,57 @@ struct ContentView: View {
                     DecoDivider().frame(maxWidth: 220)
                 }
 
-                TurnBanner(turn: turn, inCheck: board.inCheck(turn))
+                if let result {
+                    Text(result)
+                        .font(.system(size: 22, weight: .semibold, design: .serif))
+                        .tracking(5)
+                        .foregroundStyle(Deco.goldGradient)
+                } else {
+                    TurnBanner(turn: turn, inCheck: board.inCheck(turn))
+                }
 
                 BoardView(board: board,
                           selected: selected,
                           targets: Set(selected.map { board.legalMoves(from: $0) } ?? []),
                           onTap: tap)
                     .padding(.horizontal, 10)
+                    .allowsHitTesting(result == nil)
 
                 DecoDivider().frame(maxWidth: 220)
+
+                Button(action: reset) {
+                    Text("RESET")
+                        .font(.system(size: 15, weight: .semibold, design: .serif))
+                        .tracking(6)
+                        .foregroundColor(Deco.ink)
+                        .padding(.horizontal, 34)
+                        .padding(.vertical, 12)
+                        .background(Deco.goldGradient)
+                        .overlay(Rectangle().stroke(Deco.paleGold, lineWidth: 1).padding(3))
+                }
             }
         }
     }
 }
 
 extension ContentView {
+    func reset() {
+        board = Board.standard()
+        turn = .white
+        selected = nil
+        result = nil
+    }
+
     func tap(_ s: Square) {
         if let from = selected, board.legalMoves(from: from).contains(s) {
             board = board.applying(from, s)
             selected = nil
             turn = turn.opponent
+            if !board.hasAnyLegalMove(turn) {
+                result = board.inCheck(turn)
+                    ? "CHECKMATE \u{2014} \(turn.opponent.name.uppercased()) WINS"
+                    : "STALEMATE \u{2014} DRAW"
+            }
             return
         }
         if let p = board[s], p.color == turn {

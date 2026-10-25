@@ -182,4 +182,11 @@ extension Board {
         let candidates = pseudoMoves(from: s) + castlingMoves(from: s)
         return candidates.filter { !applying(s, $0).inCheck(p.color) }
     }
+
+    func hasAnyLegalMove(_ color: PieceColor) -> Bool {
+        for r in 0..<8 { for c in 0..<8 where squares[r][c]?.color == color {
+            if !legalMoves(from: Square(r: r, c: c)).isEmpty { return true }
+        } }
+        return false
+    }
 }
