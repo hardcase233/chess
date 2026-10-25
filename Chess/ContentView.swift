@@ -2,6 +2,8 @@ import SwiftUI
 
 struct ContentView: View {
     @State private var board = Board.standard()
+    @State private var turn: PieceColor = .white
+    @State private var selected: Square? = nil
 
     var body: some View {
         ZStack {
@@ -19,7 +21,12 @@ struct ContentView: View {
                     DecoDivider().frame(maxWidth: 220)
                 }
 
-                BoardView(board: board)
+                TurnBanner(turn: turn, inCheck: board.inCheck(turn))
+
+                BoardView(board: board,
+                          selected: selected,
+                          targets: Set(selected.map { board.legalMoves(from: $0) } ?? []),
+                          onTap: tap)
                     .padding(.horizontal, 10)
 
                 DecoDivider().frame(maxWidth: 220)
@@ -28,8 +35,45 @@ struct ContentView: View {
     }
 }
 
+extension ContentView {
+    func tap(_ s: Square) {
+        if let from = selected, board.legalMoves(from: from).contains(s) {
+            board = board.applying(from, s)
+            selected = nil
+            turn = turn.opponent
+            return
+        }
+        if let p = board[s], p.color == turn {
+            selected = (selected == s) ? nil : s
+        } else {
+            selected = nil
+        }
+    }
+}
+
+struct TurnBanner: View {
+    let turn: PieceColor
+    let inCheck: Bool
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Diamond()
+                .fill(turn == .white ? Deco.ivory : Deco.ink)
+                .overlay(Diamond().stroke(Deco.gold, lineWidth: 1.2))
+                .frame(width: 14, height: 14)
+            Text(inCheck ? "\(turn.name.uppercased()) TO MOVE \u{2014} CHECK" : "\(turn.name.uppercased()) TO MOVE")
+                .font(.system(size: 16, weight: .semibold, design: .serif))
+                .tracking(4)
+                .foregroundStyle(Deco.goldGradient)
+        }
+    }
+}
+
 struct BoardView: View {
     let board: Board
+    var selected: Square? = nil
+    var targets: Set<Square> = []
+    var onTap: (Square) -> Void = { _ in }
 
     var body: some View {
         GeometryReader { geo in
@@ -40,8 +84,12 @@ struct BoardView: View {
                     ForEach(0..<8, id: \.self) { r in
                         HStack(spacing: 0) {
                             ForEach(0..<8, id: \.self) { c in
-                                SquareView(dark: (r + c) % 2 == 1, piece: board.squares[r][c])
+                                let sq = Square(r: r, c: c)
+                                SquareView(dark: (r + c) % 2 == 1, piece: board.squares[r][c],
+                                           isSelected: selected == sq, isTarget: targets.contains(sq))
                                     .frame(width: cell, height: cell)
+                                    .contentShape(Rectangle())
+                                    .onTapGesture { onTap(sq) }
                             }
                         }
                     }
@@ -61,6 +109,8 @@ struct BoardView: View {
 struct SquareView: View {
     let dark: Bool
     let piece: Piece?
+    var isSelected = false
+    var isTarget = false
 
     var body: some View {
         ZStack {
@@ -69,8 +119,21 @@ struct SquareView: View {
             Diamond()
                 .stroke(dark ? Deco.gold.opacity(0.35) : Deco.cream, lineWidth: 0.8)
                 .padding(5)
+            if isSelected {
+                Rectangle().fill(Deco.paleGold.opacity(0.55))
+                Rectangle().stroke(Deco.gold, lineWidth: 2.5)
+            }
             if let piece {
                 PieceView(piece: piece).padding(2)
+            }
+            if isTarget {
+                if piece == nil {
+                    Diamond().fill(Deco.ink.opacity(0.55)).padding(14)
+                    Diamond().stroke(Deco.gold, lineWidth: 1.2).padding(14)
+                } else {
+                    Diamond().stroke(Deco.ink.opacity(0.85), lineWidth: 3).padding(1)
+                    Diamond().stroke(Deco.gold, lineWidth: 1.5).padding(1)
+                }
             }
         }
     }
