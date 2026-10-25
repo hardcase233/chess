@@ -1,0 +1,24 @@
+name: Chess
+options:
+  bundleIdPrefix: com.hardcase233
+  deploymentTarget:
+    iOS: "16.0"
+targets:
+  Chess:
+    type: application
+    platform: iOS
+    sources: [Chess]
+    info:
+      path: Chess/Info.plist
+      properties:
+        CFBundleDisplayName: Chess
+        UILaunchScreen: {}
+        UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.hardcase233.chess
+        MARKETING_VERSION: "1.0"
+        CURRENT_PROJECT_VERSION: "1"
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        TARGETED_DEVICE_FAMILY: "1"
+        CODE_SIGNING_ALLOWED: NO
